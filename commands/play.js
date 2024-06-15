@@ -10,7 +10,7 @@ module.exports = {
   permissions: "0x0000000000000800",
   options: [{
     name: 'name',
-    description: 'Type the name of the music you want to play.',
+    description: 'Type the name of the music you want bunny to play.',
     type: ApplicationCommandOptionType.String,
     required: true
   }],
