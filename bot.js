@@ -1,6 +1,4 @@
-
-
-const { Client, GatewayIntentBits, Partials } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Collection } = require("discord.js");
 const { DisTube } = require("distube");
 const { SpotifyPlugin } = require("@distube/spotify");
 const { SoundCloudPlugin } = require("@distube/soundcloud");
@@ -18,6 +16,8 @@ const client = new Client({
 });
 
 client.config = config;
+client.commands = new Collection();
+
 client.player = new DisTube(client, {
   leaveOnStop: config.opt.voiceConfig.leaveOnStop,
   leaveOnFinish: config.opt.voiceConfig.leaveOnFinish,
@@ -54,26 +54,15 @@ fs.readdir("./events/player", (_err, files) => {
   });
 });
 
-client.commands = [];
 fs.readdir(config.commandsDir, (err, files) => {
   if (err) throw err;
-  files.forEach(async (f) => {
-    try {
-      if (f.endsWith(".js")) {
-        let props = require(`${config.commandsDir}/${f}`);
-        client.commands.push({
-          name: props.name,
-          description: props.description,
-          options: props.options,
-        });
-      }
-    } catch (err) {
-      console.log(err);
+  files.forEach((f) => {
+    if (f.endsWith(".js")) {
+      let props = require(`${config.commandsDir}/${f}`);
+      client.commands.set(props.name, props);
     }
   });
 });
-
-
 
 if (config.TOKEN || process.env.TOKEN) {
   client.login(config.TOKEN || process.env.TOKEN).catch((e) => {
@@ -85,7 +74,6 @@ if (config.TOKEN || process.env.TOKEN) {
   }, 2000);
 }
 
-
 if(config.mongodbURL || process.env.MONGO){
   const mongoose = require("mongoose")
   mongoose.connect(config.mongodbURL || process.env.MONGO, {
@@ -95,10 +83,9 @@ if(config.mongodbURL || process.env.MONGO){
     console.log('\x1b[32m%s\x1b[0m', `|    🍔 Connected MongoDB!`)
   }).catch((err) => {
     console.log('\x1b[32m%s\x1b[0m', `|    🍔 Failed to connect MongoDB!`)})
-  } else {
+} else {
   console.log('\x1b[32m%s\x1b[0m', `|    🍔 Error MongoDB!`)
-  }
-
+}
 
 const express = require("express");
 const app = express();
@@ -109,4 +96,39 @@ app.get('/', (req, res) => {
 });
 app.listen(port, () => {
   console.log(`🔗 Listening to GlaceYT: http://localhost:${port}`);
+});
+
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v9');
+
+client.on('ready', async () => {
+  const rest = new REST({ version: '9' }).setToken(config.TOKEN || process.env.TOKEN);
+
+  (async () => {
+    try {
+      await rest.put(
+        Routes.applicationCommands(client.user.id),
+        { body: client.commands.map(cmd => ({ name: cmd.name, description: cmd.description, options: cmd.options })) },
+      );
+
+      console.log('Successfully registered application commands.');
+    } catch (error) {
+      console.error(error);
+    }
+  })();
+});
+
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
+
+  const command = client.commands.get(interaction.commandName);
+
+  if (!command) return;
+
+  try {
+    await command.run(client, interaction);
+  } catch (error) {
+    console.error(error);
+    await interaction.reply({ content: 'There was an error executing that command!', ephemeral: true });
+  }
 });
